@@ -1,0 +1,100 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+
+st.set_page_config(page_title="MBA Internship Dashboard", layout="wide")
+
+st.title("📊 MBA Internship Dashboard (2024-25)")
+st.write("Upload the Excel file to view and interact with the data.")
+
+uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
+
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+
+    # Clean column names
+    df.columns = df.columns.str.strip()
+
+    # --- Convert percentage columns to numeric ---
+    df['10th percentage'] = pd.to_numeric(df['10th percentage'], errors='coerce')
+    df['12th percentage'] = pd.to_numeric(df['12th percentage'], errors='coerce')
+    df['Graduation Percentage'] = pd.to_numeric(df['Graduation Percentage'], errors='coerce')
+
+    st.subheader("🔍 Data Preview")
+    st.dataframe(df.head(), use_container_width=True)
+
+    # --- Key Metrics ---
+    total_students = len(df)
+    avg_10th = round(df['10th percentage'].mean(), 2)
+    avg_12th = round(df['12th percentage'].mean(), 2)
+    avg_grad = round(df['Graduation Percentage'].mean(), 2)
+    gap_years = df['Gap year'].fillna("No").value_counts()
+    experience = df['Experience, If yes how many years?'].dropna().astype(str)
+
+    st.markdown("### 📌 Key Summary")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("👥 Total Students", total_students)
+    col2.metric("📘 Avg. 10th %", avg_10th)
+    col3.metric("📘 Avg. 12th %", avg_12th)
+    col4.metric("🎓 Avg. Graduation %", avg_grad)
+
+    # --- Pie: Gap Year ---
+    st.markdown("### 🧭 Gap Year Distribution")
+    fig_gap = px.pie(names=gap_years.index, values=gap_years.values, title="Gap Year (Yes/No)")
+    st.plotly_chart(fig_gap, use_container_width=True)
+
+    # --- Bar: Graduation Stream ---
+    st.markdown("### 🧠 Graduation Stream Distribution")
+    grad_stream_count = df['Graduation Stream'].value_counts()
+    fig_grad_stream = px.bar(
+        x=grad_stream_count.index,
+        y=grad_stream_count.values,
+        labels={'x': 'Graduation Stream', 'y': 'Count'},
+        title="Graduation Stream Preferences"
+    )
+    st.plotly_chart(fig_grad_stream, use_container_width=True)
+
+    # --- Column Chart: Internship Preferences ---
+    st.markdown("### 📈 Internship Preferences Ranking")
+    pref_cols = ['Marketing', 'Digital Marketing', 'Data Analytics', 'HR Generalist', 'Staffing',
+                 'Finance (Fundamental)', 'Finance', 'Market Research', 'Business Intelligence', 'Other']
+
+    # Strip column names and match user Excel structure
+    df.columns = df.columns.str.strip()
+    pref_cols = [col.strip() for col in pref_cols]
+
+    df_long = df.melt(value_vars=pref_cols, var_name="Field", value_name="Rank")
+    df_long.dropna(inplace=True)
+
+    fig_prefs = px.histogram(
+        df_long, x="Field", y="Rank", histfunc="avg", title="Average Preference Rank per Field",
+        labels={"Rank": "Average Rank (1=highest interest)"}
+    )
+    fig_prefs.update_layout(xaxis_tickangle=-45)
+    st.plotly_chart(fig_prefs, use_container_width=True)
+
+    # --- Optional: Experience Bar ---
+    if not experience.empty:
+        st.markdown("### 💼 Work Experience (Years)")
+        exp_count = experience.value_counts().sort_index()
+        fig_exp = px.bar(
+            x=exp_count.index, y=exp_count.values,
+            labels={'x': 'Years of Experience', 'y': 'No. of Students'},
+            title="Experience Distribution"
+        )
+        st.plotly_chart(fig_exp, use_container_width=True)
+
+    # --- Export Filtered Data ---
+    st.markdown("### 📤 Export Filtered Data")
+    selected_stream = st.multiselect("Filter by Graduation Stream", df['Graduation Stream'].unique())
+    if selected_stream:
+        filtered = df[df['Graduation Stream'].isin(selected_stream)]
+    else:
+        filtered = df
+
+    st.download_button(
+        label="Download Filtered Data as CSV",
+        data=filtered.to_csv(index=False),
+        file_name="filtered_internship_data.csv",
+        mime='text/csv'
+    )
